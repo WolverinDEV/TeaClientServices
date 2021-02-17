@@ -21,6 +21,7 @@ export type LocalAgent = {
 }
 
 export interface ClientServiceConfig {
+    getServiceHost() : string;
     getSelectedLocaleUrl() : string | null;
     getSessionType() : ClientSessionType;
     generateHostInfo() : LocalAgent;
@@ -51,7 +52,7 @@ export class ClientServices {
         this.initializeLocaleId = 0;
 
         this.sessionInitialized = false;
-        this.connection = new ClientServiceConnection(5000);
+        this.connection = new ClientServiceConnection(config.getServiceHost(), 5000);
         this.connection.events.on("notify_state_changed", event => {
             if(event.newState !== "connected") {
                 if(this.sessionInitialized) {

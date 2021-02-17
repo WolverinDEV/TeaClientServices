@@ -70,7 +70,7 @@ class GeoLocationProvider {
 
             this.cachedInfo = info.info;
         } catch (error) {
-            clientServiceLogger.logTrace(tr("Failed to load geo resolve cache: %o"), error);
+            clientServiceLogger.logTrace(tr("Failed to load geo resolve cache:\n%o"), error);
         }
     }
 
@@ -104,7 +104,7 @@ class GeoLocationProvider {
                 } as GeoLocationCache));
                 return info;
             } catch (error) {
-                clientServiceLogger.logTrace(tr("Geo resolver %s failed: %o. Trying next one."), resolver.name(), error);
+                clientServiceLogger.logTrace(tr("Geo resolver %s failed.  Trying next one:\n%o"), resolver.name(), error);
             }
         }
 

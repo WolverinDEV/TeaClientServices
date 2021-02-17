@@ -22,6 +22,8 @@ export class ClientServiceConnection {
     readonly events: Registry<ClientServiceConnectionEvents>;
     readonly reconnectInterval: number;
 
+    private readonly serviceHost: string;
+
     private reconnectTimeout: any;
     private connectionState: ConnectionState;
     private connection: WebSocket;
@@ -29,7 +31,8 @@ export class ClientServiceConnection {
     private pendingCommands: {[key: string]: PendingCommand} = {};
     private notifyHandler: {[key: string]: ((event) => void)[]} = {};
 
-    constructor(reconnectInterval: number) {
+    constructor(serviceHost: string, reconnectInterval: number) {
+        this.serviceHost = serviceHost;
         this.events = new Registry<ClientServiceConnectionEvents>();
         this.reconnectInterval = reconnectInterval;
     }
@@ -59,12 +62,7 @@ export class ClientServiceConnection {
 
         this.setState("connecting");
 
-        let address;
-        address = "client-services.teaspeak.de:27791";
-        address = "localhost:1244";
-        //address = "192.168.40.135:1244";
-
-        this.connection = new WebSocket(`wss://${address}/ws-api/v${kApiVersion}`);
+        this.connection = new WebSocket(`wss://${this.serviceHost}/ws-api/v${kApiVersion}`);
         this.connection.onclose = event => {
             clientServiceLogger.logTrace("Lost connection to statistics server (Connection closed). Reason: %s", event.reason ? `${event.reason} (${event.code})` : event.code);
             this.handleConnectionLost();
@@ -214,7 +212,7 @@ export class ClientServiceConnection {
         const unregisterHandler = () => {
             const index = handlers.indexOf(handler);
             if(index !== -1) {
-                handlers.remove(handler);
+                handlers.splice(index, 1);
             }
         }
 
