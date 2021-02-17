@@ -1,5 +1,10 @@
-export { ClientServiceConfig, ClientServices, LocalAgent } from "./ClientService";
 export { ClientServiceLogger, setClientServiceLogger } from "./Logging";
-export { ClientSessionType } from "./Messages";
+export { ActionResult } from "./Action";
 
-export { ClientServiceInvite, InviteActionResult, InviteLinkInfo, InviteCreateResult } from "./ClientServiceInvite";
+export { ClientServiceConnection } from "./Connection";
+
+export { ClientSessionType } from "./Messages";
+export * as Messages from "./Messages";
+
+export { ClientServiceInvite, InviteLinkInfo } from "./ClientServiceInvite";
+export { ClientServiceConfig, ClientServices, LocalAgent } from "./ClientService";
