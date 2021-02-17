@@ -12,8 +12,10 @@ type PendingCommand = {
 
 interface ClientServiceConnectionEvents {
     notify_state_changed: { oldState: ConnectionState, newState: ConnectionState },
-    notify_notify_received: { notify: MessageNotify }
 }
+
+type NotifyPayloadType<K extends MessageNotify["type"]> = Extract<MessageNotify, { type: K }>["payload"];
+type CommandPayloadType<K extends MessageCommand["type"]> = Extract<MessageCommand, { type: K }>["payload"];
 
 let tokenIndex = 0;
 export class ClientServiceConnection {
@@ -25,6 +27,7 @@ export class ClientServiceConnection {
     private connection: WebSocket;
 
     private pendingCommands: {[key: string]: PendingCommand} = {};
+    private notifyHandler: {[key: string]: ((event) => void)[]} = {};
 
     constructor(reconnectInterval: number) {
         this.events = new Registry<ClientServiceConnectionEvents>();
@@ -34,6 +37,7 @@ export class ClientServiceConnection {
     destroy() {
         this.disconnect();
         this.events.destroy();
+        this.notifyHandler = {};
     }
 
     getState() : ConnectionState {
@@ -122,7 +126,7 @@ export class ClientServiceConnection {
         }
     }
 
-    async executeCommand(command: MessageCommand) : Promise<MessageCommandResult> {
+    async executeMessageCommand(command: MessageCommand) : Promise<MessageCommandResult> {
         if(this.connectionState !== "connected") {
             return { type: "ConnectionClosed" };
         }
@@ -151,6 +155,83 @@ export class ClientServiceConnection {
                 timeout: setTimeout(() => proxiedResolve({ type: "ConnectionTimeout" }), 5000)
             };
         });
+    }
+
+    async executeCommand<K extends MessageCommand["type"]>(command: K, payload: CommandPayloadType<K>) : Promise<MessageCommandResult> {
+        return await this.executeMessageCommand({ type: command as any, payload: payload as any });
+    }
+
+    registerNotifyHandler<K extends MessageNotify["type"]>(notify: K, callback: (notify: NotifyPayloadType<K>) => void) : () => void {
+        const handler = this.notifyHandler[notify] || (this.notifyHandler[notify] = []);
+        handler.push(callback);
+
+        return () => this.unregisterNotifyHandler(notify, callback as any);
+    }
+
+    unregisterNotifyHandler<K extends MessageNotify["type"]>(callback: (notify: NotifyPayloadType<K>) => void);
+    unregisterNotifyHandler<K extends MessageNotify["type"]>(notify: K, callback: (notify: NotifyPayloadType<K>) => void);
+    unregisterNotifyHandler(notifyOrCallback, callback?) {
+        if(typeof notifyOrCallback === "string") {
+            const handler = this.notifyHandler[notifyOrCallback];
+            if(!handler) {
+                return;
+            }
+
+            const index = handler.indexOf(callback);
+            if(index === -1) {
+                return;
+            }
+
+            handler.splice(index);
+            if(handler.length === 0) {
+                delete this.notifyHandler[notifyOrCallback];
+            }
+        } else {
+            for(const key of Object.keys(this.notifyHandler)) {
+                this.unregisterNotifyHandler(key as any, notifyOrCallback);
+            }
+        }
+    }
+
+    catchNotify<K extends MessageNotify["type"]>(notify: K, filter?: (value: NotifyPayloadType<K>) => boolean) : () => ({ status: "success", value: NotifyPayloadType<K> } | { status: "fail" }) {
+        /*
+         * Note:
+         * The current implementation allows the user to forget about the callback without causing any memory leaks.
+         * The memory might still leak if the registered notify never triggered.
+         */
+        const handlers = this.notifyHandler[notify] || (this.notifyHandler[notify] = []);
+        const resultContainer = { result: null };
+
+        const handler = notify => {
+            if(filter && !filter(notify)) {
+                return;
+            }
+
+            resultContainer.result = notify;
+            unregisterHandler();
+        };
+
+        const unregisterHandler = () => {
+            const index = handlers.indexOf(handler);
+            if(index !== -1) {
+                handlers.remove(handler);
+            }
+        }
+
+        handlers.push(handler);
+        return () => {
+            unregisterHandler();
+            if(resultContainer.result === null) {
+                return {
+                    status: "fail"
+                };
+            } else {
+                return {
+                    status: "success",
+                    value: resultContainer.result
+                };
+            }
+        }
     }
 
     private handleConnectFail() {
@@ -195,7 +276,16 @@ export class ClientServiceConnection {
                 clientServiceLogger.logWarn("Received command result for unknown token: %o", data.token);
             }
         } else if(data.type === "Notify") {
-            this.events.fire("notify_notify_received", { notify: data.notify });
+            const handlers = this.notifyHandler[data.notify.type];
+            if(typeof handlers !== "undefined") {
+                for(const handler of [...handlers]) {
+                    try {
+                        handler(data.notify.payload);
+                    } catch (error) {
+                        clientServiceLogger.logError("Failed to invoke notify handler for %s: %o", data.notify, error);
+                    }
+                }
+            }
         } else {
             clientServiceLogger.logWarn("Received message with invalid type: %o", (data as any).type);
         }

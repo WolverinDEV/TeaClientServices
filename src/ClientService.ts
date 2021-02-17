@@ -9,6 +9,7 @@ import {
 import {geoLocationProvider} from "./GeoLocation";
 import {clientServiceLogger} from "./Logging";
 import {ClientServiceConnection} from "./Connection";
+import {Registry} from "tc-events";
 
 export type LocalAgent = {
     clientVersion: string,
@@ -25,9 +26,17 @@ export interface ClientServiceConfig {
     generateHostInfo() : LocalAgent;
 }
 
+export interface ClientServiceEvents {
+    /** Client service session has successfully be initialized */
+    notify_session_initialized: {},
+    /** The current active client service session has been closed */
+    notify_session_closed: {}
+}
+
 export class ClientServices {
     readonly config: ClientServiceConfig;
-    private connection: ClientServiceConnection;
+    readonly events: Registry<ClientServiceEvents>;
+    private readonly connection: ClientServiceConnection;
 
     private sessionInitialized: boolean;
     private retryTimer: any;
@@ -36,6 +45,7 @@ export class ClientServices {
     private initializeLocaleId: number;
 
     constructor(config: ClientServiceConfig) {
+        this.events = new Registry<ClientServiceEvents>();
         this.config = config;
         this.initializeAgentId = 0;
         this.initializeLocaleId = 0;
@@ -44,6 +54,9 @@ export class ClientServices {
         this.connection = new ClientServiceConnection(5000);
         this.connection.events.on("notify_state_changed", event => {
             if(event.newState !== "connected") {
+                if(this.sessionInitialized) {
+                    this.events.fire("notify_session_closed");
+                }
                 this.sessionInitialized = false;
                 return;
             }
@@ -60,20 +73,30 @@ export class ClientServices {
                     return;
                 }
 
-                this.sendInitializeAgent().then(undefined);
+                this.sendInitializeAgent().then(status => {
+                    switch (status) {
+                        case "aborted":
+                            return;
+
+                        case "error":
+                            clientServiceLogger.logError("Failed to initialize session. Closing it and trying again in 60 seconds.");
+                            this.scheduleRetry(60 * 1000);
+                            return;
+
+                        case "success":
+                            this.sessionInitialized = true;
+                            this.events.fire("notify_session_initialized");
+                            return;
+                    }
+                });
+
+                /* The locale does not really matter for the session so just run it async */
                 this.sendLocaleUpdate().then(undefined);
             });
         });
 
-        this.connection.events.on("notify_notify_received", event => {
-            switch (event.notify.type) {
-                case "NotifyClientsOnline":
-                    this.handleNotifyClientsOnline(event.notify.payload);
-                    break;
-
-                default:
-                    return;
-            }
+        this.connection.registerNotifyHandler("NotifyClientsOnline", notify => {
+            clientServiceLogger.logInfo("Received user count update: %o", notify);
         });
     }
 
@@ -89,6 +112,10 @@ export class ClientServices {
         this.initializeLocaleId++;
     }
 
+    getConnection() : ClientServiceConnection {
+        return this.connection;
+    }
+
     private scheduleRetry(time: number) {
         this.stop();
 
@@ -97,12 +124,13 @@ export class ClientServices {
 
     /**
      * Returns as soon the result indicates that something else went wrong rather than transmitting.
+     * Note: This will not throw an exception!
      * @param command
      * @param retryInterval
      */
     private async executeCommandWithRetry(command: MessageCommand, retryInterval: number) : Promise<MessageCommandResult> {
         while(true) {
-            const result = await this.connection.executeCommand(command);
+            const result = await this.connection.executeMessageCommand(command);
             switch (result.type) {
                 case "ServerInternalError":
                 case "CommandEnqueueError":
@@ -133,7 +161,10 @@ export class ClientServices {
         }
     }
 
-    private async sendInitializeAgent() {
+    /**
+     * @returns `true` if the session agent has been successfully initialized.
+     */
+    private async sendInitializeAgent() : Promise<"success" | "aborted" | "error"> {
         const taskId = ++this.initializeAgentId;
 
         const hostInfo = this.config.generateHostInfo();
@@ -148,12 +179,22 @@ export class ClientServices {
 
         if(this.initializeAgentId !== taskId) {
             /* We don't want to send that stuff any more */
-            return;
+            return "aborted";
         }
 
-        this.executeCommandWithRetry({ type: "SessionInitializeAgent", payload }, 2500).then(result => {
+        const result = await this.executeCommandWithRetry({ type: "SessionInitializeAgent", payload }, 2500);
+        if(this.initializeAgentId !== taskId) {
+            /* We don't want to send that stuff any more */
+            return "aborted";
+        }
+
+        if(result.type === "Success") {
+            clientServiceLogger.logTrace("Agent initialized", result);
+            return "success";
+        } else {
             clientServiceLogger.logTrace("Agent initialize result: %o", result);
-        });
+            return "error";
+        }
     }
 
     private async sendLocaleUpdate() {
@@ -173,12 +214,11 @@ export class ClientServices {
             return;
         }
 
-        this.connection.executeCommand({ type: "SessionUpdateLocale", payload }).then(result => {
-            clientServiceLogger.logTrace("Agent local update result: %o", result);
-        });
-    }
+        const result = await this.connection.executeCommand("SessionUpdateLocale", payload);
+        if(this.initializeLocaleId !== taskId) {
+            return;
+        }
 
-    private handleNotifyClientsOnline(notify: NotifyClientsOnline) {
-        clientServiceLogger.logInfo("Received user count update: %o", notify);
+        clientServiceLogger.logTrace("Agent local update result: %o", result);
     }
 }

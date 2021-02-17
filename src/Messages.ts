@@ -34,6 +34,8 @@ export type MessageCommandResult =
     | { type: "InviteKeyInvalid"; fields: string }
     | { type: "InviteKeyNotFound" };
 
+export type MessageCommandErrorResult = Exclude<MessageCommandResult, { type: "Success" }>;
+
 export type MessageNotify =
     | { type: "NotifyClientsOnline"; payload: NotifyClientsOnline }
     | { type: "NotifyInviteCreated"; payload: NotifyInviteCreated }
@@ -53,7 +55,7 @@ export type CommandSessionInitializeAgent = { session_type: ClientSessionType; p
 
 export type CommandSessionUpdateLocale = { ip_country: string | null; selected_locale: string | null; local_timestamp: number };
 
-export type CommandInviteQueryInfo = { link_id: string };
+export type CommandInviteQueryInfo = { link_id: string, register_view: boolean };
 
 export type CommandInviteLogAction = { click_type: number };
 
