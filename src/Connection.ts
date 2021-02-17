@@ -2,7 +2,7 @@ import {clientServiceLogger} from "./Logging";
 import {Message, MessageCommand, MessageCommandResult, MessageNotify} from "./Messages";
 import {Registry} from "tc-events";
 
-const kApiVersion = 1;
+export const kApiVersion = 1;
 
 type ConnectionState = "disconnected" | "connecting" | "connected" | "reconnect-pending";
 type PendingCommand = {
