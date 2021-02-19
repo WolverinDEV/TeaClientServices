@@ -105,6 +105,19 @@ export class ClientServices {
         this.connection.connect();
     }
 
+    awaitSession() : Promise<void> {
+        return new Promise(resolve => {
+            const unregister = this.events.on("notify_session_initialized", () => {
+                unregister();
+                resolve();
+            });
+        });
+    }
+
+    isSessionInitialized() {
+        return this.sessionInitialized;
+    }
+
     stop() {
         this.connection.disconnect();
         clearTimeout(this.retryTimer);
