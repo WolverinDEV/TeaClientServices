@@ -21,14 +21,15 @@ export class ClientServiceInvite {
         this.handle = handle;
     }
 
-    async createInviteLink(connectProperties: {[key: string]: string}, infoProperties: {[key: string]: string}, createNew: boolean) : Promise<ActionResult<{ linkId: string, adminToken: string }>> {
+    async createInviteLink(connectProperties: {[key: string]: string}, infoProperties: {[key: string]: string}, createNew: boolean, expire_timestamp: number) : Promise<ActionResult<{ linkId: string, adminToken: string }>> {
         const connection = this.handle.getConnection();
 
         const notify = connection.catchNotify("NotifyInviteCreated");
         const result = await connection.executeCommand("InviteCreate", {
             new_link: createNew,
             properties_connect: connectProperties,
-            properties_info: infoProperties
+            properties_info: infoProperties,
+            timestamp_expired: expire_timestamp
         });
         const notifyResult = notify();
 
