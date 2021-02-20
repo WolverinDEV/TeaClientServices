@@ -160,5 +160,7 @@ class GeoResolverIpInfo implements GeoLocationResolver {
 
 export let geoLocationProvider: GeoLocationProvider;
 
-geoLocationProvider = new GeoLocationProvider();
-geoLocationProvider.loadCache();
+export function initializeGeoService() {
+    geoLocationProvider = new GeoLocationProvider();
+    geoLocationProvider.loadCache();
+}
