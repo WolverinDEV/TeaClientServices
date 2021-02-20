@@ -43,6 +43,14 @@ export type MessageNotify =
     | { type: "NotifyInviteInfo"; payload: NotifyInviteInfo };
 
 /* Some command data payload */
+export type InviteAction =
+    | { type: "OpenTeaClientProtocol" }
+    | { type: "RedirectWebClient" }
+    | { type: "ConnectAttempt" }
+    | { type: "ConnectSuccess" }
+    | { type: "ConnectFailure"; payload: { reason: string } }
+    | { type: "ConnectNoAction"; payload: { reason: string } };
+
 export enum ClientSessionType {
     WebClient = 0,
     TeaClient = 1,
@@ -58,7 +66,7 @@ export type CommandSessionUpdateLocale = {     ip_country: string | null; select
 
 export type CommandInviteQueryInfo = { link_id: string; register_view: boolean };
 
-export type CommandInviteLogAction = { click_type: number };
+export type CommandInviteLogAction = { link_id: string; action: InviteAction };
 
 export type CommandInviteCreate = {     new_link: boolean; properties_connect: { [key: string]: string };     properties_info: { [key: string]: string }; timestamp_expired: number };
 
@@ -68,4 +76,3 @@ export type NotifyClientsOnline = {     users_online: { [key: number]: number };
 export type NotifyInviteCreated = { link_id: string; admin_token: string | null };
 
 export type NotifyInviteInfo = {     link_id: string; timestamp_created: number; timestamp_deleted: number; timestamp_expired: number; amount_viewed: number; amount_clicked:     number; properties_connect: { [key: string]: string };     properties_info: { [key: string]: string } };
-

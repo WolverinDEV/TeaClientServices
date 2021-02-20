@@ -23,11 +23,14 @@ export function createErrorResult<T>(result: MessageCommandErrorResult) : Action
     }
 }
 
-export function createResult<T>(result: T) : ActionResult<T> {
+export function createResult() : ActionResult<void>;
+export function createResult<T>(result: T) : ActionResult<T>;
+
+export function createResult(result?) : ActionResult<any> {
     return {
         status: "success",
         result: result,
-        unwrap(): T {
+        unwrap() {
             return result;
         }
     }
